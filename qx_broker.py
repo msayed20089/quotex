@@ -4,15 +4,12 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.common.keys import Keys
 import time
 import logging
 import random
 import os
-import json
+import subprocess
 from config import QX_EMAIL, QX_PASSWORD, QX_LOGIN_URL
 
 class QXBrokerManager:
@@ -22,47 +19,66 @@ class QXBrokerManager:
         self.last_activity = time.time()
         self.session_data = {}
         self.setup_driver()
-        self.ensure_login()
-    
+        
     def setup_driver(self):
-        """إعداد متصفح Chrome لـ Quotex"""
+        """إعداد متصفح Chrome لـ Railway بدون webdriver-manager"""
         chrome_options = Options()
         
-        # إعدادات Railway المثالية
+        # إعدادات Railway الأساسية
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
         
-        # إعدادات لتحسين الأداء
+        # إعدادات إضافية للاستقرار
         chrome_options.add_argument("--disable-extensions")
         chrome_options.add_argument("--disable-plugins")
         chrome_options.add_argument("--disable-images")
         chrome_options.add_argument("--disable-javascript")
         chrome_options.add_argument("--disable-web-security")
-        chrome_options.add_argument("--disable-logging")
         chrome_options.add_argument("--log-level=3")
+        chrome_options.add_argument("--silent")
+        
+        # إعدادات لتحسين الأداء
+        chrome_options.add_argument("--memory-pressure-off")
+        chrome_options.add_argument("--max_old_space_size=4096")
         
         try:
-            # استخدام webdriver-manager
-            service = Service(ChromeDriverManager().install())
-            self.driver = webdriver.Chrome(service=service, options=chrome_options)
-            
-            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-            
-            logging.info("✅ تم إعداد متصفح Chrome لـ Quotex بنجاح")
+            # الطريقة الأولى: استخدام Chrome الموجود في النظام
+            self.driver = webdriver.Chrome(options=chrome_options)
+            logging.info("✅ تم إعداد متصفح Chrome بنجاح على Railway")
             
         except Exception as e:
-            logging.error(f"❌ خطأ في إعداد المتصفح: {e}")
-            self.setup_driver_fallback()
+            logging.error(f"❌ الخطأ في إعداد المتصفح: {e}")
+            # محاولة تثبيت Chrome يدوياً إذا لزم الأمر
+            self.install_chrome_manual()
     
-    def setup_driver_fallback(self):
-        """طريقة بديلة لإعداد المتصفح"""
+    def install_chrome_manual(self):
+        """تثبيت Chrome يدوياً على Railway"""
         try:
+            logging.info("🔄 جاري تثبيت Chrome يدوياً...")
+            
+            # تثبيت المتصفح باستخدام apt
+            subprocess.run(['apt-get', 'update'], check=True)
+            subprocess.run(['apt-get', 'install', '-y', 'wget'], check=True)
+            
+            # تحميل وتثبيت Chrome
+            subprocess.run([
+                'wget', '-q', '-O', '-', 'https://dl-ssl.google.com/linux/linux_signing_key.pub'
+            ], check=True)
+            
+            subprocess.run([
+                'sh', '-c', 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
+            ], check=True)
+            
+            subprocess.run(['apt-get', 'update'], check=True)
+            subprocess.run(['apt-get', 'install', '-y', 'google-chrome-stable'], check=True)
+            
+            logging.info("✅ تم تثبيت Chrome بنجاح")
+            
+            # إعادة محاولة إعداد المتصفح
             chrome_options = Options()
             chrome_options.add_argument("--headless=new")
             chrome_options.add_argument("--no-sandbox")
@@ -70,51 +86,46 @@ class QXBrokerManager:
             chrome_options.add_argument("--window-size=1920,1080")
             
             self.driver = webdriver.Chrome(options=chrome_options)
-            logging.info("✅ تم إعداد المتصفح باستخدام الطريقة البديلة")
+            logging.info("✅ تم إعداد المتصفح بعد التثبيت اليدوي")
             
         except Exception as e:
-            logging.error(f"❌ فشل جميع محاولات إعداد المتصفح: {e}")
-            raise e
-    
+            logging.error(f"❌ فشل التثبيت اليدوي: {e}")
+            raise Exception("لا يمكن تشغيل المتصفح على Railway")
+
     def ensure_login(self):
         """التأكد من تسجيل الدخول"""
-        max_retries = 2
-        for attempt in range(max_retries):
-            try:
-                # الانتقال مباشرة لصفحة الديمو تريد
-                self.driver.get("https://qxbroker.com/ar/demo-trade")
-                time.sleep(5)
-                
-                # التحقق من حالة الدخول من خلال الـ JavaScript settings
-                login_status = self.check_login_from_js()
-                if login_status:
-                    self.is_logged_in = True
-                    logging.info("✅ المستخدم مسجل الدخول وجاهز للتداول")
-                    return True
-                else:
-                    logging.info(f"🔐 محاولة تسجيل الدخول {attempt + 1}/{max_retries}")
-                    if self.login():
-                        return True
-            except Exception as e:
-                logging.error(f"❌ خطأ في التأكد من تسجيل الدخول: {e}")
-            
-            time.sleep(3)
-        
-        logging.error("❌ فشل جميع محاولات تسجيل الدخول")
-        return False
-
-    def check_login_from_js(self):
-        """التحقق من تسجيل الدخول من خلال بيانات JavaScript"""
         try:
-            # الحصول على بيانات الـ settings من window
-            settings_script = "return window.settings;"
-            settings = self.driver.execute_script(settings_script)
+            # الانتقال مباشرة لصفحة الديمو تريد
+            self.driver.get("https://qxbroker.com/ar/demo-trade")
+            time.sleep(8)  # زيادة وقت الانتظار
             
-            if settings and settings.get('email'):
-                self.session_data = settings
-                logging.info(f"✅ تم التعرف على المستخدم: {settings.get('email')}")
-                logging.info(f"💰 الرصيد: {settings.get('demoBalance')}")
+            # التحقق من حالة الدخول
+            if self.check_login_status():
+                self.is_logged_in = True
+                logging.info("✅ المستخدم مسجل الدخول وجاهز للتداول")
                 return True
+            else:
+                logging.info("🔐 جاري تسجيل الدخول...")
+                return self.login()
+                
+        except Exception as e:
+            logging.error(f"❌ خطأ في التأكد من تسجيل الدخول: {e}")
+            return False
+
+    def check_login_status(self):
+        """التحقق من حالة تسجيل الدخول"""
+        try:
+            # التحقق من خلال عنوان URL
+            current_url = self.driver.current_url
+            if "demo-trade" in current_url and "sign-in" not in current_url:
+                return True
+            
+            # التحقق من خلال وجود عناصر الواجهة
+            balance_elements = self.driver.find_elements(By.XPATH, 
+                "//*[contains(text(), 'رصيد') or contains(text(), 'Balance')]")
+            if balance_elements:
+                return True
+                
             return False
         except:
             return False
@@ -124,16 +135,15 @@ class QXBrokerManager:
         try:
             logging.info("🔗 جاري تسجيل الدخول إلى Quotex...")
             self.driver.get("https://qxbroker.com/ar/sign-in")
-            time.sleep(5)
+            time.sleep(8)  # زيادة وقت الانتظار
             
-            # البحث عن حقول الدخول في واجهة Quotex الجديدة
+            # البحث عن حقول الدخول
             email_field = self.find_element_with_retry([
                 "input[name='email']", 
                 "input[type='email']",
-                "input[placeholder*='email' i]", 
-                "input[placeholder*='بريد' i]",
-                "input[data-testid='email-input']"
-            ])
+                "input[placeholder*='email']", 
+                "input[placeholder*='بريد']"
+            ], timeout=15)
             
             if not email_field:
                 logging.error("❌ لم يتم العثور على حقل البريد الإلكتروني")
@@ -141,15 +151,14 @@ class QXBrokerManager:
             
             email_field.clear()
             email_field.send_keys(QX_EMAIL)
-            time.sleep(1)
+            time.sleep(2)
             
             password_field = self.find_element_with_retry([
                 "input[name='password']", 
                 "input[type='password']",
-                "input[placeholder*='password' i]", 
-                "input[placeholder*='كلمة' i]",
-                "input[data-testid='password-input']"
-            ])
+                "input[placeholder*='password']", 
+                "input[placeholder*='كلمة']"
+            ], timeout=15)
             
             if not password_field:
                 logging.error("❌ لم يتم العثور على حقل كلمة المرور")
@@ -157,7 +166,7 @@ class QXBrokerManager:
             
             password_field.clear()
             password_field.send_keys(QX_PASSWORD)
-            time.sleep(1)
+            time.sleep(2)
             
             # البحث عن زر الدخول
             login_button = self.find_clickable_element([
@@ -165,16 +174,15 @@ class QXBrokerManager:
                 "//button[contains(text(), 'دخول')]",
                 "//button[contains(text(), 'Sign')]", 
                 "//button[contains(text(), 'Login')]",
-                "//button[@type='submit']",
-                "//button[contains(@class, 'login-button')]"
-            ])
+                "//button[@type='submit']"
+            ], timeout=15)
             
             if login_button:
                 login_button.click()
-                time.sleep(8)
+                time.sleep(10)  # زيادة وقت الانتظار بعد الدخول
                 
                 # التحقق من نجاح الدخول
-                if self.check_login_from_js():
+                if self.check_login_status():
                     self.is_logged_in = True
                     logging.info("✅ تم تسجيل الدخول بنجاح إلى Quotex")
                     return True
@@ -193,17 +201,7 @@ class QXBrokerManager:
             
             # الانتقال مباشرة لصفحة التداول
             self.driver.get("https://qxbroker.com/ar/demo-trade")
-            time.sleep(5)
-            
-            # انتظار تحميل التطبيق React
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.ID, "root"))
-            )
-            
-            # انتظار تحميل بيانات الـ settings
-            WebDriverWait(self.driver, 10).until(
-                lambda driver: driver.execute_script("return window.settings !== undefined;")
-            )
+            time.sleep(8)
             
             self.last_activity = time.time()
             logging.info("✅ تم تحضير الصفحة للصفقة التالية")
@@ -211,39 +209,12 @@ class QXBrokerManager:
             
         except Exception as e:
             logging.error(f"❌ خطأ في تحديث الصفحة: {e}")
-            return self.recover_connection()
-
-    def recover_connection(self):
-        """استعادة الاتصال"""
-        try:
-            logging.info("🔄 محاولة استعادة الاتصال...")
-            
-            try:
-                self.driver.refresh()
-                time.sleep(5)
-                if self.check_login_from_js():
-                    return True
-            except:
-                pass
-            
-            if self.login():
-                return True
-            
-            logging.info("🔄 إعادة تشغيل المتصفح...")
-            self.close_browser()
-            time.sleep(3)
-            self.setup_driver()
-            return self.ensure_login()
-            
-        except Exception as e:
-            logging.error(f"❌ فشل في استعادة الاتصال: {e}")
             return False
 
     def execute_trade(self, pair, direction, duration=30):
         """تنفيذ صفقة على منصة Quotex"""
         try:
-            if not self.is_logged_in or not self.check_login_from_js():
-                logging.warning("⚠️ فقدان الاتصال، جاري إعادة الاتصال...")
+            if not self.is_logged_in:
                 if not self.ensure_login():
                     logging.error("❌ فشل إعادة الاتصال")
                     return False
@@ -258,13 +229,11 @@ class QXBrokerManager:
             if not self.search_and_select_pair(pair):
                 return False
             
-            # تحديد مدة الصفقة (30 ثانية)
-            if not self.set_duration(duration):
-                return False
+            # تحديد مدة الصفقة
+            self.set_duration(duration)
             
-            # تحديد مبلغ التداول ($1)
-            if not self.set_amount(1):
-                return False
+            # تحديد مبلغ التداول
+            self.set_amount(1)
             
             # تنفيذ الصفقة
             if not self.execute_direction(direction):
@@ -276,41 +245,32 @@ class QXBrokerManager:
             
         except Exception as e:
             logging.error(f"❌ خطأ عام في تنفيذ الصفقة: {e}")
-            self.recover_connection()
             return False
 
     def search_and_select_pair(self, pair):
-        """البحث عن الزوج واختياره في واجهة Quotex الجديدة"""
+        """البحث عن الزوج واختياره"""
         try:
-            # البحث عن زر اختيار الزوج (الزر + كما في الشرح)
-            pair_button = self.find_clickable_element([
-                "//button[contains(@class, 'asset-selector')]",
-                "//div[contains(@class, 'asset-selector')]",
+            # البحث عن زر اختيار الزوج (+)
+            plus_button = self.find_clickable_element([
                 "//button[contains(text(), '+')]",
                 "//div[contains(text(), '+')]",
-                "//*[contains(@class, 'asset-dropdown')]",
-                "//*[contains(@data-testid, 'asset-selector')]"
-            ])
+                "//*[contains(@class, 'add')]"
+            ], timeout=10)
             
-            if pair_button:
-                pair_button.click()
+            if plus_button:
+                plus_button.click()
                 logging.info("➕ تم فتح قائمة الأزواج")
-                time.sleep(2)
-            else:
-                logging.warning("⚠️ لم يتم العثور على زر اختيار الزوج، المتابعة مباشرة")
+                time.sleep(3)
             
             # البحث عن شريط البحث
             search_box = self.find_element_with_retry([
                 "input[placeholder*='بحث']", 
                 "input[placeholder*='search']", 
-                "input[type='search']",
-                "input[class*='search']",
-                "input[data-testid*='search']"
-            ])
+                "input[type='search']"
+            ], timeout=10)
             
             if search_box:
                 search_box.clear()
-                # تحويل اسم الزوج للتنسيق المناسب (مثال: USD/EGP -> USDEGP)
                 search_pair = pair.replace('/', '').upper()
                 search_box.send_keys(search_pair)
                 logging.info(f"🔍 جاري البحث عن الزوج: {search_pair}")
@@ -322,10 +282,8 @@ class QXBrokerManager:
             # اختيار الزوج من النتائج
             pair_element = self.find_clickable_element([
                 f"//*[contains(text(), '{pair}')]",
-                f"//*[contains(text(), '{search_pair}')]",
-                f"//div[contains(@class, 'asset-item') and contains(text(), '{pair}')]",
-                f"//div[contains(@data-testid, 'asset-{search_pair}')]"
-            ])
+                f"//*[contains(text(), '{search_pair}')]"
+            ], timeout=10)
             
             if pair_element:
                 pair_element.click()
@@ -345,43 +303,25 @@ class QXBrokerManager:
         try:
             # البحث عن أزرار المدة
             duration_buttons = self.driver.find_elements(By.XPATH, 
-                f"//button[contains(text(), '{duration}') or contains(@data-duration, '{duration}')]")
+                f"//button[contains(text(), '{duration}')]")
             
             for btn in duration_buttons:
                 if btn.is_displayed() and btn.is_enabled():
                     btn.click()
                     logging.info(f"⏱ تم تحديد مدة {duration} ثانية")
                     time.sleep(2)
-                    return True
-            
-            # إذا لم يتم العثور، نبحث عن الأزرار الشائعة
-            common_durations = ["//button[contains(text(), '30')]", 
-                              "//button[contains(@class, 'duration-30')]"]
-            
-            for xpath in common_durations:
-                try:
-                    btn = self.driver.find_element(By.XPATH, xpath)
-                    if btn.is_displayed() and btn.is_enabled():
-                        btn.click()
-                        logging.info(f"⏱ تم تحديد مدة {duration} ثانية (الطريقة البديلة)")
-                        time.sleep(2)
-                        return True
-                except:
-                    continue
+                    return
             
             logging.warning(f"⚠️ لم يتم العثور على زر مدة {duration} ثانية")
-            return True  # نكمل رغم ذلك
-            
         except Exception as e:
             logging.warning(f"⚠️ خطأ في تحديد المدة: {e}")
-            return True  # نكمل رغم ذلك
 
     def set_amount(self, amount):
         """تحديد مبلغ التداول"""
         try:
             # البحث عن حقل المبلغ
             amount_inputs = self.driver.find_elements(By.XPATH, 
-                "//input[@type='number' or contains(@placeholder, '$') or contains(@data-testid, 'amount')]")
+                "//input[@type='number' or contains(@placeholder, '$')]")
             
             for amount_input in amount_inputs:
                 try:
@@ -389,113 +329,71 @@ class QXBrokerManager:
                     amount_input.send_keys(str(amount))
                     logging.info(f"💰 تم تحديد المبلغ: ${amount}")
                     time.sleep(1)
-                    return True
+                    return
                 except:
                     continue
             
             logging.info("💰 استخدام المبلغ الافتراضي")
-            return True
-            
         except Exception as e:
             logging.warning(f"⚠️ خطأ في تحديد المبلغ: {e}")
-            return True
 
     def execute_direction(self, direction):
         """تنفيذ اتجاه الصفقة"""
         try:
             if direction.upper() == 'BUY':
-                # البحث عن زر UP/صاعد/شراء
-                buy_selectors = [
-                    "//button[contains(text(), 'صاعد')]",
-                    "//button[contains(text(), 'UP')]",
-                    "//button[contains(text(), 'شراء')]",
-                    "//button[contains(@class, 'up-button')]",
-                    "//button[contains(@class, 'buy-button')]",
-                    "//button[contains(@data-testid, 'up-button')]",
-                    "//button[contains(@style, 'background-color: rgb(14, 203, 129)')]"  # اللون الأخضر
-                ]
+                # البحث عن زر UP/صاعد
+                buy_buttons = self.driver.find_elements(By.XPATH, 
+                    "//button[contains(text(), 'صاعد') or contains(text(), 'UP') or contains(text(), 'شراء')]")
                 
-                buy_button = self.find_clickable_element(buy_selectors)
+                for btn in buy_buttons:
+                    if btn.is_displayed() and btn.is_enabled():
+                        btn.click()
+                        logging.info("🟢 تم النقر على زر صاعد/UP")
+                        time.sleep(3)
+                        return True
                 
-                if buy_button:
-                    buy_button.click()
-                    logging.info("🟢 تم النقر على زر صاعد/UP")
-                    time.sleep(3)
-                    return True
-                else:
-                    logging.error("❌ لم يتم العثور على زر صاعد")
-                    return False
+                logging.error("❌ لم يتم العثور على زر صاعد")
+                return False
             else:
-                # البحث عن زر DOWN/هابط/بيع
-                sell_selectors = [
-                    "//button[contains(text(), 'هابط')]",
-                    "//button[contains(text(), 'DOWN')]",
-                    "//button[contains(text(), 'بيع')]",
-                    "//button[contains(@class, 'down-button')]",
-                    "//button[contains(@class, 'sell-button')]",
-                    "//button[contains(@data-testid, 'down-button')]",
-                    "//button[contains(@style, 'background-color: rgb(255, 82, 82)')]"  # اللون الأحمر
-                ]
+                # البحث عن زر DOWN/هابط
+                sell_buttons = self.driver.find_elements(By.XPATH, 
+                    "//button[contains(text(), 'هابط') or contains(text(), 'DOWN') or contains(text(), 'بيع')]")
                 
-                sell_button = self.find_clickable_element(sell_selectors)
+                for btn in sell_buttons:
+                    if btn.is_displayed() and btn.is_enabled():
+                        btn.click()
+                        logging.info("🔴 تم النقر على زر هابط/DOWN")
+                        time.sleep(3)
+                        return True
                 
-                if sell_button:
-                    sell_button.click()
-                    logging.info("🔴 تم النقر على زر هابط/DOWN")
-                    time.sleep(3)
-                    return True
-                else:
-                    logging.error("❌ لم يتم العثور على زر هابط")
-                    return False
+                logging.error("❌ لم يتم العثور على زر هابط")
+                return False
                     
         except Exception as e:
             logging.error(f"❌ خطأ في تنفيذ الاتجاه: {e}")
             return False
 
     def get_trade_result(self):
-        """الحصول على نتيجة الصفقة من Quotex"""
+        """الحصول على نتيجة الصفقة"""
         try:
             logging.info("⏳ في انتظار نتيجة الصفقة...")
-            time.sleep(35)  # 30 ثانية + هامش أمان
+            time.sleep(35)
             
-            # تحديث الصفحة للحصول على أحدث البيانات
+            # تحديث الصفحة
             self.driver.refresh()
             time.sleep(5)
             
             logging.info("🔍 جاري البحث عن نتيجة الصفقة...")
             
-            # البحث في الصفحة عن نتائج الصفقات
+            # البحث في الصفحة عن النتائج
             page_content = self.driver.page_source
             
-            # طريقة 1: البحث عن علامات النجاح/الفشل في الصفحة
-            if '+"' in page_content and ('green' in page_content.lower() or 'profit' in page_content.lower() or 'rgb(14, 203, 129)' in page_content):
+            if '+' in page_content and ('green' in page_content.lower() or 'profit' in page_content.lower()):
                 logging.info("🎉 تم التعرف على صفقة رابحة")
                 return "WIN"
-            elif ('red' in page_content.lower() or 'loss' in page_content.lower() or 'rgb(255, 82, 82)' in page_content) and '+"' not in page_content:
+            else:
                 logging.info("❌ تم التعرف على صفقة خاسرة")
                 return "LOSS"
-            
-            # طريقة 2: البحث في عناصر الواجهة
-            try:
-                trade_elements = self.driver.find_elements(By.XPATH, 
-                    "//div[contains(@class, 'trade-result') or contains(@class, 'deal-item')]")
-                
-                for element in trade_elements:
-                    element_text = element.text
-                    element_html = element.get_attribute('innerHTML')
-                    
-                    if '+' in element_text and ('green' in element_html or 'profit' in element_text):
-                        logging.info("🎉 تم التعرف على صفقة رابحة (من العناصر)")
-                        return "WIN"
-                    elif 'green' not in element_html and 'red' in element_html and '+' not in element_text:
-                        logging.info("❌ تم التعرف على صفقة خاسرة (من العناصر)")
-                        return "LOSS"
-            except:
-                pass
-            
-            # طريقة 3: إذا لم نجد نتيجة واضحة
-            logging.warning("⚠️ لم يتم العثور على نتيجة واضحة، استخدام القيمة الافتراضية")
-            return random.choice(['WIN', 'LOSS'])
                 
         except Exception as e:
             logging.error(f"❌ خطأ في الحصول على النتيجة: {e}")
@@ -538,10 +436,9 @@ class QXBrokerManager:
     def keep_alive(self):
         """الحفاظ على نشاط المتصفح"""
         try:
-            if time.time() - self.last_activity > 600:  # 10 دقائق
+            if time.time() - self.last_activity > 600:
                 logging.info("🔄 تجديد نشاط المتصفح...")
                 self.refresh_and_prepare()
-            
             return True
         except Exception as e:
             logging.error(f"❌ خطأ في الحفاظ على النشاط: {e}")
