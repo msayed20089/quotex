@@ -3,6 +3,7 @@ import time
 import threading
 from datetime import datetime, timedelta
 import logging
+from config import CAIRO_TZ
 
 class TradingScheduler:
     def __init__(self):
@@ -19,20 +20,26 @@ class TradingScheduler:
             'win_trades': 0,
             'loss_trades': 0,
             'net_profit': 0,
-            'session_start': datetime.now()
+            'session_start': datetime.now(CAIRO_TZ)
         }
         
+        self.pending_trades = {}
+        
+    def get_cairo_time(self):
+        """الحصول على وقت القاهرة"""
+        return datetime.now(CAIRO_TZ)
+    
     def start_24h_trading(self):
-        """بدء التداول 24 ساعة بدون توقف"""
-        logging.info("🚀 بدء التداول 24 ساعة...")
+        """بدء التداول 24 ساعة بتوقيت القاهرة"""
+        logging.info("🚀 بدء التداول 24 ساعة بتوقيت القاهرة...")
         
         # إرسال رسالة بدء التشغيل
-        current_time = datetime.now().strftime("%H:%M:%S")
+        current_time = self.get_cairo_time().strftime("%H:%M:%S")
         self.telegram_bot.send_message(
             f"🎯 <b>بدء تشغيل البوت بنجاح!</b>\n\n"
-            f"📊 البوت يعمل الآن 24 ساعة بدون توقف\n"
+            f"📊 البوت يعمل الآن 24 ساعة بتوقيت القاهرة\n"
             f"🔄 صفقة كل 3 دقائق على مدار الساعة\n"
-            f"⏰ الوقت الحالي: {current_time}\n\n"
+            f"⏰ الوقت الحالي في القاهرة: {current_time}\n\n"
             f"🚀 <i>استعد لفرص ربح مستمرة!</i>"
         )
         
@@ -45,12 +52,12 @@ class TradingScheduler:
     def start_immediate_trade(self):
         """بدء أول صفقة فورية"""
         try:
-            # حساب أقرب وقت مع ثواني = 00
-            now = datetime.now()
-            next_trade_time = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
-            time_until_trade = (next_trade_time - now).total_seconds()
+            # حساب أقرب وقت مع ثواني = 00 بتوقيت القاهرة
+            now_cairo = self.get_cairo_time()
+            next_trade_time = now_cairo.replace(second=0, microsecond=0) + timedelta(minutes=1)
+            time_until_trade = (next_trade_time - now_cairo).total_seconds()
             
-            logging.info(f"⏰ أول صفقة بعد: {time_until_trade:.0f} ثانية - الساعة: {next_trade_time.strftime('%H:%M:%S')}")
+            logging.info(f"⏰ أول صفقة بعد: {time_until_trade:.0f} ثانية - الساعة: {next_trade_time.strftime('%H:%M:%S')} بتوقيت القاهرة")
             
             # جدولة الصفقة الأولى
             threading.Timer(time_until_trade, self.execute_trade_cycle).start()
@@ -59,27 +66,31 @@ class TradingScheduler:
             logging.error(f"❌ خطأ في الصفقة الفورية: {e}")
     
     def schedule_regular_trades(self):
-        """جدولة الصفقات كل 3 دقائق على مدار 24 ساعة"""
+        """جدولة الصفقات كل 3 دقائق بتوقيت القاهرة"""
         # مسح الجدول القديم
         schedule.clear()
         
-        # جدولة صفقة كل 3 دقائق على مدار 24 ساعة
+        # جدولة صفقة كل 3 دقائق على مدار 24 ساعة بتوقيت القاهرة
         for hour in range(0, 24):  # 24 ساعة
             for minute in range(0, 60, 3):  # كل 3 دقائق
                 schedule_time = f"{hour:02d}:{minute:02d}"
-                schedule.every().day.at(schedule_time).do(self.execute_trade_cycle)
+                schedule.every().day.at(schedule_time).do(self.execute_trade_cycle).tag('cairo_trades')
         
-        logging.info("✅ تم جدولة الصفقات كل 3 دقائق على مدار 24 ساعة")
+        logging.info("✅ تم جدولة الصفقات كل 3 دقائق بتوقيت القاهرة")
     
     def execute_trade_cycle(self):
-        """دورة تنفيذ الصفقة الكاملة"""
+        """دورة تنفيذ الصفقة الكاملة بتوقيت القاهرة"""
         try:
             # تحليل واتخاذ قرار
             trade_data = self.trading_engine.analyze_and_decide()
             
             # وقت التنفيذ بعد 60 ثانية (مع ثواني = 00)
-            execute_time = (datetime.now() + timedelta(seconds=60)).replace(second=0, microsecond=0)
-            execute_time_str = execute_time.strftime("%H:%M:%S")
+            execute_time = self.get_cairo_time() + timedelta(seconds=60)
+            execute_time_str = execute_time.replace(second=0, microsecond=0).strftime("%H:%M:%S")
+            
+            # تخزين بيانات الصفقة
+            trade_id = f"{execute_time_str}_{trade_data['pair']}"
+            self.pending_trades[trade_id] = trade_data
             
             # إرسال إشارة الصفقة
             self.telegram_bot.send_trade_signal(
@@ -88,17 +99,23 @@ class TradingScheduler:
                 execute_time_str
             )
             
-            logging.info(f"📤 إشارة صفقة: {trade_data['pair']} - {trade_data['direction']} - {execute_time_str}")
+            logging.info(f"📤 إشارة صفقة: {trade_data['pair']} - {trade_data['direction']} - {execute_time_str} بتوقيت القاهرة")
             
             # تنفيذ الصفقة بعد 60 ثانية بالضبط
-            threading.Timer(60, self.process_trade_result, [trade_data]).start()
+            threading.Timer(60, self.process_trade_result, [trade_id]).start()
             
         except Exception as e:
             logging.error(f"❌ خطأ في دورة الصفقة: {e}")
     
-    def process_trade_result(self, trade_data):
+    def process_trade_result(self, trade_id):
         """معالجة نتيجة الصفقة"""
         try:
+            if trade_id not in self.pending_trades:
+                logging.error(f"❌ صفقة غير موجودة: {trade_id}")
+                return
+                
+            trade_data = self.pending_trades[trade_id]
+            
             # محاكاة تنفيذ الصفقة
             self.qx_manager.execute_trade(
                 trade_data['pair'],
@@ -119,8 +136,11 @@ class TradingScheduler:
                 self.stats
             )
             
-            current_time = datetime.now().strftime("%H:%M:%S")
-            logging.info(f"✅ نتيجة صفقة: {trade_data['pair']} - {result} - الوقت: {current_time}")
+            current_time = self.get_cairo_time().strftime("%H:%M:%S")
+            logging.info(f"✅ نتيجة صفقة: {trade_data['pair']} - {result} - الوقت: {current_time} بتوقيت القاهرة")
+            
+            # مسح الصفقة من القائمة
+            del self.pending_trades[trade_id]
             
             # إرسال إحصائيات كل 10 صفقات
             if self.stats['total_trades'] % 10 == 0:
@@ -131,7 +151,7 @@ class TradingScheduler:
     
     def send_periodic_stats(self):
         """إرسال إحصائيات دورية"""
-        current_time = datetime.now().strftime("%H:%M:%S")
+        current_time = self.get_cairo_time().strftime("%H:%M:%S")
         stats_text = f"""
 📊 <b>إحصائيات دورية</b>
 
@@ -140,7 +160,7 @@ class TradingScheduler:
 • الصفقات الخاسرة: {self.stats['loss_trades']}
 • صافي الربح: {self.stats['net_profit']}
 
-⏰ آخر تحديث: {current_time}
+⏰ آخر تحديث: {current_time} بتوقيت القاهرة
 
 🎯 <i>استمر في التداول!</i>
 """
