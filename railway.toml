@@ -1,0 +1,20 @@
+[build]
+builder = "nixpacks"
+
+[build.environment]
+NODE_VERSION = "18"
+
+[deploy]
+startCommand = "python main.py"
+restartPolicyType = "always"
+
+[deploy.healthCheckPath]
+path = "/"
+timeout = 300
+initialDelay = 30
+periodSeconds = 60
+failureThreshold = 3
+
+[deploy.resources]
+memory = 1024
+cpu = 1000
