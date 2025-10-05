@@ -1,5 +1,6 @@
 import random
 from datetime import datetime
+from config import CAIRO_TZ
 
 class TradingEngine:
     def __init__(self):
@@ -11,9 +12,9 @@ class TradingEngine:
         pair = random.choice(self.pairs)
         direction = random.choice(['BUY', 'SELL'])
         
-        # وقت دقيق مع ثواني = 00 ونظام 24 ساعة
-        current_time = datetime.now()
-        trade_time = current_time.replace(second=0, microsecond=0).strftime("%H:%M:%S")
+        # وقت توقيت القاهرة مع ثواني = 00
+        cairo_time = datetime.now(CAIRO_TZ)
+        trade_time = cairo_time.replace(second=0, microsecond=0).strftime("%H:%M:%S")
         
         return {
             'pair': pair,
@@ -33,3 +34,7 @@ class TradingEngine:
             
         stats['net_profit'] = stats['win_trades'] - stats['loss_trades']
         return stats
+    
+    def get_cairo_time(self):
+        """الحصول على وقت القاهرة الحالي"""
+        return datetime.now(CAIRO_TZ).strftime("%H:%M:%S")
