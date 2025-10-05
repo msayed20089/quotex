@@ -1,6 +1,6 @@
 import os
 
-# إعدادات البوت - استخدام environment variables للأمان
+# إعدادات البوت
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN', "7920984703:AAHkRNpgzDxBzS61hAe7r7cO_fATlAB8oqM")
 CHANNEL_ID = os.getenv('CHANNEL_ID', "@Kingelg0ld")
 QX_SIGNUP_URL = "https://broker-qx.pro/sign-up/?lid=1376472"
@@ -19,4 +19,4 @@ TRADING_PAIRS = [
 
 # إعدادات التداول
 TRADE_DURATION = 30
-TRADE_INTERVAL = 3
+TRADE_INTERVAL = 3  # كل 3 دقائق
