@@ -1,4 +1,5 @@
 import os
+from pytz import timezone
 
 # إعدادات البوت
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN', "7920984703:AAHkRNpgzDxBzS61hAe7r7cO_fATlAB8oqM")
@@ -20,3 +21,6 @@ TRADING_PAIRS = [
 # إعدادات التداول
 TRADE_DURATION = 30
 TRADE_INTERVAL = 3  # كل 3 دقائق
+
+# توقيت القاهرة
+CAIRO_TZ = timezone('Africa/Cairo')
