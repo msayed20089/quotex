@@ -27,12 +27,13 @@ class TradingScheduler:
         logging.info("🚀 بدء التداول 24 ساعة...")
         
         # إرسال رسالة بدء التشغيل
+        current_time = datetime.now().strftime("%H:%M:%S")
         self.telegram_bot.send_message(
-            "🎯 <b>بدء تشغيل البوت بنجاح!</b>\n\n"
-            "📊 البوت يعمل الآن 24 ساعة بدون توقف\n"
-            "🔄 صفقة كل 3 دقائق على مدار الساعة\n"
-            "⏰ الثواني دائماً 00 (مثال: 11:40:00)\n\n"
-            "🚀 <i>استعد لفرص ربح مستمرة!</i>"
+            f"🎯 <b>بدء تشغيل البوت بنجاح!</b>\n\n"
+            f"📊 البوت يعمل الآن 24 ساعة بدون توقف\n"
+            f"🔄 صفقة كل 3 دقائق على مدار الساعة\n"
+            f"⏰ الوقت الحالي: {current_time}\n\n"
+            f"🚀 <i>استعد لفرص ربح مستمرة!</i>"
         )
         
         # بدء أول صفقة فورية
@@ -49,7 +50,7 @@ class TradingScheduler:
             next_trade_time = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
             time_until_trade = (next_trade_time - now).total_seconds()
             
-            logging.info(f"⏰ أول صفقة بعد: {time_until_trade:.0f} ثانية")
+            logging.info(f"⏰ أول صفقة بعد: {time_until_trade:.0f} ثانية - الساعة: {next_trade_time.strftime('%H:%M:%S')}")
             
             # جدولة الصفقة الأولى
             threading.Timer(time_until_trade, self.execute_trade_cycle).start()
@@ -77,16 +78,17 @@ class TradingScheduler:
             trade_data = self.trading_engine.analyze_and_decide()
             
             # وقت التنفيذ بعد 60 ثانية (مع ثواني = 00)
-            execute_time = (datetime.now() + timedelta(seconds=60)).replace(second=0, microsecond=0).strftime("%H:%M:%S")
+            execute_time = (datetime.now() + timedelta(seconds=60)).replace(second=0, microsecond=0)
+            execute_time_str = execute_time.strftime("%H:%M:%S")
             
             # إرسال إشارة الصفقة
             self.telegram_bot.send_trade_signal(
                 trade_data['pair'],
                 trade_data['direction'],
-                execute_time
+                execute_time_str
             )
             
-            logging.info(f"📤 إشارة صفقة: {trade_data['pair']} - {trade_data['direction']} - {execute_time}")
+            logging.info(f"📤 إشارة صفقة: {trade_data['pair']} - {trade_data['direction']} - {execute_time_str}")
             
             # تنفيذ الصفقة بعد 60 ثانية بالضبط
             threading.Timer(60, self.process_trade_result, [trade_data]).start()
@@ -117,7 +119,8 @@ class TradingScheduler:
                 self.stats
             )
             
-            logging.info(f"✅ نتيجة صفقة: {trade_data['pair']} - {result}")
+            current_time = datetime.now().strftime("%H:%M:%S")
+            logging.info(f"✅ نتيجة صفقة: {trade_data['pair']} - {result} - الوقت: {current_time}")
             
             # إرسال إحصائيات كل 10 صفقات
             if self.stats['total_trades'] % 10 == 0:
@@ -128,6 +131,7 @@ class TradingScheduler:
     
     def send_periodic_stats(self):
         """إرسال إحصائيات دورية"""
+        current_time = datetime.now().strftime("%H:%M:%S")
         stats_text = f"""
 📊 <b>إحصائيات دورية</b>
 
@@ -136,7 +140,7 @@ class TradingScheduler:
 • الصفقات الخاسرة: {self.stats['loss_trades']}
 • صافي الربح: {self.stats['net_profit']}
 
-⏰ آخر تحديث: {datetime.now().strftime("%H:%M:%S")}
+⏰ آخر تحديث: {current_time}
 
 🎯 <i>استمر في التداول!</i>
 """
