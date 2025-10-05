@@ -3,8 +3,8 @@ import telegram
 import logging
 import os
 import random
-from datetime import datetime
-from config import CAIRO_TZ
+from datetime import datetime, timedelta
+from config import CAIRO_TZ, TELEGRAM_TOKEN, CHANNEL_ID, QX_SIGNUP_URL
 
 class TelegramBot:
     def __init__(self):
@@ -65,7 +65,7 @@ class TelegramBot:
     
     def send_trade_result(self, pair, result, stats):
         """إرسال نتيجة الصفقة"""
-        result_emoji = "🎉 WIN" if result == 'ربح' else "❌ LOSS"
+        result_emoji = "🎉 WIN" if result == 'WIN' else "❌ LOSS"
         current_time = self.get_cairo_time()
         
         text = f"""
@@ -83,4 +83,16 @@ class TelegramBot:
 
 🚀 <i>استمر في التداول بذكاء!</i>
 """
+        return self.send_message(text)
+    
+    def send_motivational_message(self):
+        """إرسال رسالة تحفيزية"""
+        messages = [
+            "🔥 استعد للربح! الصفقات القادمة ستكون مميزة",
+            "💪 لحظات من التركيز تخلق أيامًا من النجاح",
+            "🚀 الفرص لا تأتي بالصدفة، بل نصنعها بالتداول الذكي",
+            "📈 كل صفقة جديدة هي فرصة للربح"
+        ]
+        current_time = self.get_cairo_time()
+        text = f"⏰ <b>استعد!</b> - الوقت: {current_time}\n\n{random.choice(messages)}"
         return self.send_message(text)
