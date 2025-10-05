@@ -47,9 +47,9 @@ class TelegramBot:
             logging.error(f"❌ خطأ في إرسال الرسالة: {e}")
             return False
     
-  def send_trade_signal(self, pair, direction, trade_time):
-    """إرسال إشارة التداول في وقت دقيق"""
-    text = f"""
+    def send_trade_signal(self, pair, direction, trade_time):
+        """إرسال إشارة التداول في وقت دقيق"""
+        text = f"""
 📊 <b>إشارة تداول جديدة</b>
 
 💰 <b>الزوج:</b> {pair}
@@ -59,7 +59,7 @@ class TelegramBot:
 
 🔔 <i>استعد للصفقة القادمة</i>
 """
-    return self.send_message(text)
+        return self.send_message(text)
     
     def send_trade_result(self, pair, result, stats):
         """إرسال نتيجة الصفقة"""
@@ -90,4 +90,3 @@ class TelegramBot:
         ]
         text = f"⏰ <b>استعد!</b>\n\n{random.choice(messages)}"
         return self.send_message(text)
-
