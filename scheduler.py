@@ -1,13 +1,19 @@
 import schedule
 import time
+import threading
 from datetime import datetime, timedelta
-from threading import Thread
+import logging
 
 class TradingScheduler:
     def __init__(self):
+        from qx_broker import QXBrokerManager
+        from telegram_bot import TelegramBot
+        from trading_engine import TradingEngine
+        
         self.qx_manager = QXBrokerManager()
         self.telegram_bot = TelegramBot()
         self.trading_engine = TradingEngine()
+        
         self.stats = {
             'total_trades': 0,
             'win_trades': 0,
@@ -15,92 +21,106 @@ class TradingScheduler:
             'net_profit': 0,
             'session_start': datetime.now()
         }
-        self.next_trade_time = None
         
-    def schedule_tasks(self):
-        """جدولة جميع المهام"""
-        # الساعة 5:40 صباحاً
-        schedule.every().day.at("05:40").do(self.send_start_announcement)
+        self.next_trade_data = None
+        self.trade_count = 0
         
-        # الساعة 5:58 صباحاً
-        schedule.every().day.at("05:58").do(self.send_preparation_message)
+    def start_immediate_trading(self):
+        """بدء التداول الفوري بعد التشغيل"""
+        logging.info("🚀 بدء التداول الفوري...")
         
-        # بدء الصفقات من 6:00 إلى 20:00
-        self.schedule_trading_session()
-        
-        # إعادة تعيين الإحصائيات كل 6 ساعات
-        schedule.every(6).hours.do(self.reset_session_stats)
-        
-        # تقرير نهائي الساعة 2 صباحاً
-        schedule.every().day.at("02:00").do(self.send_daily_report)
-    
-    def send_start_announcement(self):
-        """إرسال إعلان بدء التداول"""
-        text = """
-🔄 <b>البوت يبدأ نشر الصفقات الساعة 6 صباحاً</b>
-
-📊 <i>استعد لجلسة تداول مليئة بالفرص!</i>
-
-🎯 <b>التسجيل في منصة كيوتكس والحصول على بونص يصل إلى 30%</b>
-سجل من اللينك ده: https://broker-qx.pro/sign-up/?lid=1376472
-"""
-        self.telegram_bot.send_message(text)
-    
-    def send_preparation_message(self):
-        """إرسال رسالة الاستعداد"""
-        self.telegram_bot.send_motivational_message()
-    
-    def schedule_trading_session(self):
-        """جدولة جلسة التداول كل 3 دقائق"""
-        start_time = datetime.now().replace(hour=6, minute=0, second=0, microsecond=0)
-        end_time = datetime.now().replace(hour=20, minute=0, second=0, microsecond=0)
-        
-        current_time = start_time
-        while current_time <= end_time:
-            schedule_time = current_time.strftime("%H:%M")
-            
-            # جدولة إشارة الصفقة قبل دقيقة
-            signal_time = (current_time - timedelta(minutes=1)).strftime("%H:%M")
-            schedule.every().day.at(signal_time).do(
-                self.send_trade_signal, 
-                current_time + timedelta(seconds=35)
-            )
-            
-            # جدولة تنفيذ الصفقة
-            schedule.every().day.at(schedule_time).do(
-                self.execute_scheduled_trade,
-                current_time + timedelta(seconds=35)
-            )
-            
-            current_time += timedelta(minutes=3)
-    
-    def send_trade_signal(self, trade_execution_time):
-        """إرسال إشارة التداول قبل دقيقة"""
-        trade_data = self.trading_engine.analyze_and_decide()
-        self.next_trade_data = trade_data
-        self.next_trade_time = trade_execution_time
-        
-        self.telegram_bot.send_trade_signal(
-            trade_data['pair'],
-            trade_data['direction'],
-            trade_execution_time.strftime("%H:%M:%S")
-        )
-    
-    def execute_scheduled_trade(self, execution_time):
-        """تنفيذ الصفقة المجدولة"""
-        if not self.next_trade_data:
-            return
-        
-        # تنفيذ الصفقة على المنصة
-        success = self.qx_manager.execute_trade(
-            self.next_trade_data['pair'],
-            self.next_trade_data['direction'],
-            self.next_trade_data['duration']
+        # إرسال رسالة بدء التشغيل
+        self.telegram_bot.send_message(
+            "🎯 <b>بدء تشغيل البوت بنجاح!</b>\n\n"
+            "📊 البوت يعمل الآن وسيبدأ الصفقات فوراً\n"
+            "⏰ جلسة التداول: 6:00 صباحاً - 8:00 مساءً\n"
+            "🔄 صفقة كل 3 دقائق\n\n"
+            "🚀 <i>استعد لفرص ربح مميزة!</i>"
         )
         
-        if success:
-            # الانتظار لمعرفة النتيجة
-            time.sleep(35)
+        # بدء أول صفقة خلال 30 ثانية
+        schedule.every(30).seconds.do(self.execute_immediate_trade)
+        
+        # بعد أول صفقة، انتقل للنظام كل 3 دقائق
+        self.trade_count = 0
+        
+    def execute_immediate_trade(self):
+        """تنفيذ صفقة فورية"""
+        try:
+            # تحليل واتخاذ قرار
+            trade_data = self.trading_engine.analyze_and_decide()
+            
+            # إرسال إشارة الصفقة
+            trade_time = datetime.now().strftime("%H:%M:%S")
+            self.telegram_bot.send_trade_signal(
+                trade_data['pair'],
+                trade_data['direction'],
+                trade_time
+            )
+            
+            logging.info(f"📤 تم إرسال إشارة الصفقة: {trade_data['pair']} - {trade_data['direction']}")
+            
+            # تنفيذ الصفقة بعد 35 ثانية
+            threading.Timer(35, self.process_trade_result, [trade_data]).start()
+            
+            # بعد الصفقة الأولى، انتقل للنظام كل 3 دقائق
+            self.trade_count += 1
+            if self.trade_count == 1:
+                schedule.clear()
+                self.start_regular_schedule()
+                
+        except Exception as e:
+            logging.error(f"❌ خطأ في الصفقة الفورية: {e}")
+    
+    def start_regular_schedule(self):
+        """بدء الجدولة المنتظمة كل 3 دقائق"""
+        logging.info("🔄 بدء الجدولة المنتظمة كل 3 دقائق")
+        
+        # صفقة كل 3 دقائق
+        schedule.every(3).minutes.do(self.execute_regular_trade)
+        
+        # إرسال رسالة تأكيد
+        self.telegram_bot.send_message(
+            "🔄 <b>بدء الجدولة المنتظمة</b>\n\n"
+            "📊 البوت يعمل الآن بالنظام المنتظم\n"
+            "⏰ صفقة كل 3 دقائق\n"
+            "🕗 من 6:00 صباحاً إلى 8:00 مساءً\n\n"
+            "🎯 <i>جاري تحضير الصفقات القادمة...</i>"
+        )
+    
+    def execute_regular_trade(self):
+        """تنفيذ صفقة منتظمة"""
+        try:
+            # تحليل واتخاذ قرار
+            trade_data = self.trading_engine.analyze_and_decide()
+            
+            # إرسال إشارة الصفقة قبل 60 ثانية من التنفيذ
+            signal_time = datetime.now() + timedelta(seconds=60)
+            self.telegram_bot.send_trade_signal(
+                trade_data['pair'],
+                trade_data['direction'],
+                signal_time.strftime("%H:%M:%S")
+            )
+            
+            logging.info(f"📤 تم إرسال إشارة الصفقة: {trade_data['pair']} - {trade_data['direction']}")
+            
+            # تنفيذ الصفقة بعد 60 ثانية
+            threading.Timer(60, self.process_trade_result, [trade_data]).start()
+            
+        except Exception as e:
+            logging.error(f"❌ خطأ في الصفقة المنتظمة: {e}")
+    
+    def process_trade_result(self, trade_data):
+        """معالجة نتيجة الصفقة"""
+        try:
+            # محاكاة تنفيذ الصفقة
+            self.qx_manager.execute_trade(
+                trade_data['pair'],
+                trade_data['direction'],
+                trade_data['duration']
+            )
+            
+            # الحصول على النتيجة
             result = self.qx_manager.get_trade_result()
             
             # تحديث الإحصائيات
@@ -108,42 +128,22 @@ class TradingScheduler:
             
             # إرسال النتيجة
             self.telegram_bot.send_trade_result(
-                self.next_trade_data['pair'],
+                trade_data['pair'],
                 result,
                 self.stats
             )
-        
-        self.next_trade_data = None
-    
-    def reset_session_stats(self):
-        """إعادة تعيين إحصائيات الجلسة"""
-        self.stats = {
-            'total_trades': 0,
-            'win_trades': 0,
-            'loss_trades': 0,
-            'net_profit': 0,
-            'session_start': datetime.now()
-        }
-    
-    def send_daily_report(self):
-        """إرسال تقرير يومي"""
-        text = f"""
-📊 <b>تقرير التداول اليومي</b>
-
-📈 <b>إحصائيات اليوم:</b>
-• إجمالي الصفقات: {self.stats['total_trades']}
-• الصفقات الرابحة: {self.stats['win_trades']}
-• الصفقات الخاسرة: {self.stats['loss_trades']}
-• صافي الربح: {self.stats['net_profit']}
-
-🎯 <i>نراكم في جلسة تداول جديدة!</i>
-"""
-        self.telegram_bot.send_message(text)
-        self.reset_session_stats()
+            
+            logging.info(f"✅ تم معالجة صفقة: {trade_data['pair']} - {result}")
+            
+        except Exception as e:
+            logging.error(f"❌ خطأ في معالجة النتيجة: {e}")
     
     def run_scheduler(self):
         """تشغيل الجدولة"""
-        self.schedule_tasks()
+        # بدء التداول الفوري
+        self.start_immediate_trading()
+        
+        # تشغيل الجدولة
         while True:
             schedule.run_pending()
             time.sleep(1)
