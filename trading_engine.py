@@ -3,6 +3,7 @@ from datetime import datetime
 
 class TradingEngine:
     def __init__(self):
+        from config import TRADING_PAIRS
         self.pairs = TRADING_PAIRS
         
     def analyze_and_decide(self):
