@@ -3,6 +3,7 @@ import telegram
 import logging
 import os
 import random
+from datetime import datetime
 
 # استيراد الإعدادات من config
 try:
@@ -48,7 +49,7 @@ class TelegramBot:
             return False
     
     def send_trade_signal(self, pair, direction, trade_time):
-        """إرسال إشارة التداول مع ثواني = 00"""
+        """إرسال إشارة التداول مع نظام 24 ساعة"""
         text = f"""
 📊 <b>إشارة تداول جديدة</b>
 
@@ -65,11 +66,14 @@ class TelegramBot:
     def send_trade_result(self, pair, result, stats):
         """إرسال نتيجة الصفقة"""
         result_emoji = "🎉 ربح" if result == 'ربح' else "❌ خسارة"
+        current_time = datetime.now().strftime("%H:%M:%S")
+        
         text = f"""
 🎯 <b>نتيجة الصفقة</b>
 
 💰 <b>الزوج:</b> {pair}
 📊 <b>النتيجة:</b> {result_emoji}
+⏰ <b>الوقت:</b> {current_time}
 
 📈 <b>إحصائيات الجلسة:</b>
 • إجمالي الصفقات: {stats['total_trades']}
