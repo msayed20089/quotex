@@ -3,7 +3,6 @@ from scheduler import TradingScheduler
 import logging
 import threading
 import time
-import os
 
 # إعداد التسجيل
 logging.basicConfig(
@@ -37,8 +36,8 @@ def main():
         scheduler_thread.start()
         
         logger.info("✅ بوت التداول الآلي يعمل بنجاح!")
-        logger.info("📊 البوت سيبدأ الصفقات فوراً")
-        logger.info("🔄 نظام الصفقات: كل 3 دقائق")
+        logger.info("📊 البوت سيبدأ الصفقات فوراً في أوقات دقيقة")
+        logger.info("🔄 نظام الصفقات: كل 3 دقائق (06:00, 06:03, 06:06, ...)")
         
         # البقاء في حلقة رئيسية
         while True:
