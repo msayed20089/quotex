@@ -1,19 +1,39 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater
+import telegram
 import logging
+import os
+import random
+
+# استيراد الإعدادات من config
+try:
+    from config import CHANNEL_ID, TELEGRAM_TOKEN, QX_SIGNUP_URL
+except ImportError:
+    # استخدام القيم الافتراضية إذا فشل الاستيراد
+    CHANNEL_ID = os.getenv('CHANNEL_ID', '@Kingelg0ld')
+    TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN', '7920984703:AAHkRNpgzDxBzS61hAe7r7cO_fATlAB8oqM')
+    QX_SIGNUP_URL = "https://broker-qx.pro/sign-up/?lid=1376472"
 
 class TelegramBot:
     def __init__(self):
-        self.updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
-        self.bot = self.updater.bot
+        self.token = TELEGRAM_TOKEN
+        self.channel_id = CHANNEL_ID
+        self.signup_url = QX_SIGNUP_URL
+        try:
+            self.bot = telegram.Bot(token=self.token)
+        except Exception as e:
+            logging.error(f"خطأ في تهيئة بوت التليجرام: {e}")
+            self.bot = None
         
     def create_signup_button(self):
         """إنشاء زر التسجيل"""
-        keyboard = [[InlineKeyboardButton("📈 سجل في كيوتكس واحصل على 30% بونص", url=QX_SIGNUP_URL)]]
+        keyboard = [[InlineKeyboardButton("📈 سجل في كيوتكس واحصل على 30% بونص", url=self.signup_url)]]
         return InlineKeyboardMarkup(keyboard)
     
-    def send_message(self, text, chat_id=CHANNEL_ID):
+    def send_message(self, text, chat_id=None):
         """إرسال رسالة مع زر التسجيل"""
+        if chat_id is None:
+            chat_id = self.channel_id
+            
         try:
             self.bot.send_message(
                 chat_id=chat_id,
@@ -21,15 +41,16 @@ class TelegramBot:
                 reply_markup=self.create_signup_button(),
                 parse_mode='HTML'
             )
+            logging.info("✅ تم إرسال الرسالة بنجاح")
             return True
         except Exception as e:
-            logging.error(f"خطأ في إرسال الرسالة: {e}")
+            logging.error(f"❌ خطأ في إرسال الرسالة: {e}")
             return False
     
     def send_trade_signal(self, pair, direction, trade_time):
         """إرسال إشارة التداول"""
         text = f"""
-📊 <b>*استعد صفقه جديده*</b>
+📊 <b>إشارة تداول جديدة</b>
 
 💰 <b>الزوج:</b> {pair}
 🕒 <b>ميعاد الصفقة:</b> {trade_time}
@@ -42,11 +63,12 @@ class TelegramBot:
     
     def send_trade_result(self, pair, result, stats):
         """إرسال نتيجة الصفقة"""
+        result_emoji = "🎉 ربح" if result == 'ربح' else "❌ خسارة"
         text = f"""
 🎯 <b>نتيجة الصفقة</b>
 
 💰 <b>الزوج:</b> {pair}
-📊 <b>النتيجة:</b> {'🎉 ربح' if result == 'ربح' else '❌ خسارة'}
+📊 <b>النتيجة:</b> {result_emoji}
 
 📈 <b>إحصائيات الجلسة:</b>
 • إجمالي الصفقات: {stats['total_trades']}
