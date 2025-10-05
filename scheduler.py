@@ -3,7 +3,6 @@ import time
 import threading
 from datetime import datetime, timedelta
 import logging
-import random
 
 class TradingScheduler:
     def __init__(self):
@@ -23,7 +22,7 @@ class TradingScheduler:
             'session_start': datetime.now()
         }
         
-        self.is_trading_session = False
+        self.regular_schedule_started = False
         
     def start_immediate_trading(self):
         """بدء التداول الفوري بعد التشغيل"""
@@ -34,11 +33,11 @@ class TradingScheduler:
             "🎯 <b>بدء تشغيل البوت بنجاح!</b>\n\n"
             "📊 البوت يعمل الآن وسيبدأ الصفقات فوراً\n"
             "⏰ جلسة التداول: 6:00 صباحاً - 8:00 مساءً\n"
-            "🔄 صفقة كل 3 دقائق\n\n"
+            "🔄 صفقة كل 3 دقائق في أوقات دقيقة\n\n"
             "🚀 <i>استعد لفرص ربح مميزة!</i>"
         )
         
-        # بدء أول صفقة في أقرب وقت دقيق (بدون ثواني)
+        # بدء أول صفقة في أقرب وقت دقيق
         self.schedule_next_immediate_trade()
         
     def schedule_next_immediate_trade(self):
@@ -49,9 +48,10 @@ class TradingScheduler:
         next_trade_time = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
         
         # إذا كان خارج وقت التداول (8 مساءً - 6 صباحاً)، ابدأ من 6 الصبح
-        if now.hour >= 20 or now.hour < 6:
+        current_hour = now.hour
+        if current_hour >= 20 or current_hour < 6:
             next_trade_time = now.replace(hour=6, minute=0, second=0, microsecond=0)
-            if now.hour >= 20:
+            if current_hour >= 20:
                 next_trade_time += timedelta(days=1)
         
         time_until_trade = (next_trade_time - now).total_seconds()
@@ -61,31 +61,29 @@ class TradingScheduler:
         # جدولة الصفقة
         threading.Timer(time_until_trade, self.execute_immediate_trade).start()
         
-        # بعد الصفقة الفورية، ابدأ الجدولة المنتظمة
-        self.is_trading_session = True
-    
     def execute_immediate_trade(self):
         """تنفيذ صفقة فورية في وقت دقيق"""
         try:
             # تحليل واتخاذ قرار
             trade_data = self.trading_engine.analyze_and_decide()
-            current_time = datetime.now().strftime("%H:%M:00")
             
-            # إرسال إشارة الصفقة قبل 60 ثانية من التنفيذ
-            signal_time = (datetime.now() + timedelta(seconds=60)).strftime("%H:%M:00")
+            # وقت التنفيذ بعد 60 ثانية
+            execute_time = (datetime.now() + timedelta(seconds=60)).strftime("%H:%M:00")
+            
+            # إرسال إشارة الصفقة
             self.telegram_bot.send_trade_signal(
                 trade_data['pair'],
                 trade_data['direction'],
-                signal_time
+                execute_time
             )
             
-            logging.info(f"📤 إشارة صفقة: {trade_data['pair']} - {trade_data['direction']} - {signal_time}")
+            logging.info(f"📤 إشارة صفقة: {trade_data['pair']} - {trade_data['direction']} - {execute_time}")
             
             # تنفيذ الصفقة بعد 60 ثانية بالضبط
             threading.Timer(60, self.process_trade_result, [trade_data]).start()
             
-            # بعد الصفقة الأولى، ابدأ الجدولة المنتظمة كل 3 دقائق
-            if not hasattr(self, 'regular_schedule_started'):
+            # بعد الصفقة الأولى، ابدأ الجدولة المنتظمة
+            if not self.regular_schedule_started:
                 self.regular_schedule_started = True
                 self.start_regular_schedule()
                 
@@ -105,32 +103,23 @@ class TradingScheduler:
             "🎯 <i>جاري تحضير الصفقات القادمة...</i>"
         )
         
-        # جدولة الصفقات كل 3 دقائق في أوقات دقيقة
+        # جدولة الصفقات كل 3 دقائق
         self.schedule_regular_trades()
     
     def schedule_regular_trades(self):
         """جدولة الصفقات كل 3 دقائق في أوقات دقيقة"""
-        now = datetime.now()
-        
-        # بدء من الدقيقة الحالية + 3 دقائق
-        start_minute = (now.minute // 3 + 1) * 3
-        if start_minute >= 60:
-            start_minute = 0
+        # مسح الجدول القديم
+        schedule.clear()
         
         # إنشاء الجدول لكل 3 دقائق من 6:00 إلى 20:00
         for hour in range(6, 20):  # من 6 صباحاً إلى 8 مساءً
             for minute in range(0, 60, 3):  # كل 3 دقائق
-                if hour == 6 and minute < 0:  # تخطي الأوقات قبل 6:00
-                    continue
-                if hour == 20 and minute > 0:  # تخطي الأوقات بعد 20:00
-                    continue
-                
                 schedule_time = f"{hour:02d}:{minute:02d}"
-                schedule.every().day.at(schedule_time).do(self.execute_scheduled_trade, schedule_time)
+                schedule.every().day.at(schedule_time).do(self.execute_scheduled_trade)
         
         logging.info("✅ تم جدولة الصفقات كل 3 دقائق في أوقات دقيقة")
     
-    def execute_scheduled_trade(self, schedule_time):
+    def execute_scheduled_trade(self):
         """تنفيذ صفقة مجدولة في وقت دقيق"""
         try:
             # تحقق إذا كان وقت التداول نشط
@@ -141,14 +130,17 @@ class TradingScheduler:
             # تحليل واتخاذ قرار
             trade_data = self.trading_engine.analyze_and_decide()
             
-            # إرسال إشارة الصفقة قبل 60 ثانية من التنفيذ
+            # وقت التنفيذ بعد 60 ثانية
+            execute_time = (datetime.now() + timedelta(seconds=60)).strftime("%H:%M:00")
+            
+            # إرسال إشارة الصفقة
             self.telegram_bot.send_trade_signal(
                 trade_data['pair'],
                 trade_data['direction'],
-                schedule_time
+                execute_time
             )
             
-            logging.info(f"📤 إشارة صفقة: {trade_data['pair']} - {trade_data['direction']} - {schedule_time}")
+            logging.info(f"📤 إشارة صفقة: {trade_data['pair']} - {trade_data['direction']} - {execute_time}")
             
             # تنفيذ الصفقة بعد 60 ثانية بالضبط
             threading.Timer(60, self.process_trade_result, [trade_data]).start()
