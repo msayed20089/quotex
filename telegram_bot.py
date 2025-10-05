@@ -18,8 +18,10 @@ class TelegramBot:
             self.bot = None
     
     def get_cairo_time(self):
-        """الحصول على وقت القاهرة"""
-        return datetime.now(CAIRO_TZ).strftime("%H:%M:%S")
+        """الحصول على وقت القاهرة +3 ساعات"""
+        cairo_time = datetime.now(CAIRO_TZ)
+        adjusted_time = cairo_time + timedelta(hours=3)
+        return adjusted_time.strftime("%H:%M:%S")
         
     def create_signup_button(self):
         """إنشاء زر التسجيل"""
@@ -45,7 +47,7 @@ class TelegramBot:
             return False
     
     def send_trade_signal(self, pair, direction, trade_time):
-        """إرسال إشارة التداول بتوقيت القاهرة"""
+        """إرسال إشارة التداول"""
         current_time = self.get_cairo_time()
         text = f"""
 📊 <b>إشارة تداول جديدة</b>
@@ -55,16 +57,15 @@ class TelegramBot:
 📈 <b>الاتجاه:</b> {direction}
 ⏱ <b>المدة:</b> 30 ثانية
 
-⏰ <b>الوقت الحالي:</b> {current_time} 🇪🇬
+⏰ <b>الوقت الحالي:</b> {current_time}
 
-⚡ <i>البوت يعمل 24 ساعة بتوقيت القاهرة</i>
-🔔 <i>استعد للصفقة القادمة</i>
+🔔 <i>الصفقة ستبدأ خلال دقيقة</i>
 """
         return self.send_message(text)
     
     def send_trade_result(self, pair, result, stats):
-        """إرسال نتيجة الصفقة بتوقيت القاهرة"""
-        result_emoji = "🎉 ربح" if result == 'ربح' else "❌ خسارة"
+        """إرسال نتيجة الصفقة"""
+        result_emoji = "🎉 WIN" if result == 'ربح' else "❌ LOSS"
         current_time = self.get_cairo_time()
         
         text = f"""
@@ -72,7 +73,7 @@ class TelegramBot:
 
 💰 <b>الزوج:</b> {pair}
 📊 <b>النتيجة:</b> {result_emoji}
-⏰ <b>الوقت:</b> {current_time} 🇪🇬
+⏰ <b>الوقت:</b> {current_time}
 
 📈 <b>إحصائيات الجلسة:</b>
 • إجمالي الصفقات: {stats['total_trades']}
@@ -82,16 +83,4 @@ class TelegramBot:
 
 🚀 <i>استمر في التداول بذكاء!</i>
 """
-        return self.send_message(text)
-    
-    def send_motivational_message(self):
-        """إرسال رسالة تحفيزية"""
-        messages = [
-            "🔥 استعد للربح! الصفقات القادمة ستكون مميزة",
-            "💪 لحظات من التركيز تخلق أيامًا من النجاح",
-            "🚀 الفرص لا تأتي بالصدفة، بل نصنعها بالتداول الذكي",
-            "📈 كل صفقة جديدة هي فرصة للربح"
-        ]
-        current_time = self.get_cairo_time()
-        text = f"⏰ <b>استعد!</b> - الوقت: {current_time} 🇪🇬\n\n{random.choice(messages)}"
         return self.send_message(text)
