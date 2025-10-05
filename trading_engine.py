@@ -11,7 +11,7 @@ class TradingEngine:
         pair = random.choice(self.pairs)
         direction = random.choice(['BUY', 'SELL'])
         
-        # وقت دقيق مع ثواني = 00
+        # وقت دقيق مع ثواني = 00 ونظام 24 ساعة
         current_time = datetime.now()
         trade_time = current_time.replace(second=0, microsecond=0).strftime("%H:%M:%S")
         
