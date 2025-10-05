@@ -4,15 +4,7 @@ import logging
 import os
 import random
 from datetime import datetime
-
-# استيراد الإعدادات من config
-try:
-    from config import CHANNEL_ID, TELEGRAM_TOKEN, QX_SIGNUP_URL
-except ImportError:
-    # استخدام القيم الافتراضية إذا فشل الاستيراد
-    CHANNEL_ID = os.getenv('CHANNEL_ID', '@Kingelg0ld')
-    TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN', '7920984703:AAHkRNpgzDxBzS61hAe7r7cO_fATlAB8oqM')
-    QX_SIGNUP_URL = "https://broker-qx.pro/sign-up/?lid=1376472"
+from config import CAIRO_TZ
 
 class TelegramBot:
     def __init__(self):
@@ -24,6 +16,10 @@ class TelegramBot:
         except Exception as e:
             logging.error(f"خطأ في تهيئة بوت التليجرام: {e}")
             self.bot = None
+    
+    def get_cairo_time(self):
+        """الحصول على وقت القاهرة"""
+        return datetime.now(CAIRO_TZ).strftime("%H:%M:%S")
         
     def create_signup_button(self):
         """إنشاء زر التسجيل"""
@@ -49,7 +45,8 @@ class TelegramBot:
             return False
     
     def send_trade_signal(self, pair, direction, trade_time):
-        """إرسال إشارة التداول مع نظام 24 ساعة"""
+        """إرسال إشارة التداول بتوقيت القاهرة"""
+        current_time = self.get_cairo_time()
         text = f"""
 📊 <b>إشارة تداول جديدة</b>
 
@@ -58,22 +55,24 @@ class TelegramBot:
 📈 <b>الاتجاه:</b> {direction}
 ⏱ <b>المدة:</b> 30 ثانية
 
-⚡ <i>البوت يعمل 24 ساعة</i>
+⏰ <b>الوقت الحالي:</b> {current_time} 🇪🇬
+
+⚡ <i>البوت يعمل 24 ساعة بتوقيت القاهرة</i>
 🔔 <i>استعد للصفقة القادمة</i>
 """
         return self.send_message(text)
     
     def send_trade_result(self, pair, result, stats):
-        """إرسال نتيجة الصفقة"""
+        """إرسال نتيجة الصفقة بتوقيت القاهرة"""
         result_emoji = "🎉 ربح" if result == 'ربح' else "❌ خسارة"
-        current_time = datetime.now().strftime("%H:%M:%S")
+        current_time = self.get_cairo_time()
         
         text = f"""
 🎯 <b>نتيجة الصفقة</b>
 
 💰 <b>الزوج:</b> {pair}
 📊 <b>النتيجة:</b> {result_emoji}
-⏰ <b>الوقت:</b> {current_time}
+⏰ <b>الوقت:</b> {current_time} 🇪🇬
 
 📈 <b>إحصائيات الجلسة:</b>
 • إجمالي الصفقات: {stats['total_trades']}
@@ -93,5 +92,6 @@ class TelegramBot:
             "🚀 الفرص لا تأتي بالصدفة، بل نصنعها بالتداول الذكي",
             "📈 كل صفقة جديدة هي فرصة للربح"
         ]
-        text = f"⏰ <b>استعد!</b>\n\n{random.choice(messages)}"
+        current_time = self.get_cairo_time()
+        text = f"⏰ <b>استعد!</b> - الوقت: {current_time} 🇪🇬\n\n{random.choice(messages)}"
         return self.send_message(text)
